@@ -1,0 +1,6 @@
+# Privacy-Preserving AI Code Review Framework Dependencies
+# Compatible with Python 3.10, 3.11, 3.12, 3.13, 3.14+
+cryptography>=41.0.0
+fastapi>=0.100.0
+uvicorn>=0.23.0
+pydantic>=2.0.0

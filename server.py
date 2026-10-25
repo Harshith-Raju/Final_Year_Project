@@ -13,7 +13,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 from src.pipeline import PrivacyPreservingReviewPipeline
 
-PORT = 8501
+PORT = int(os.getenv("PORT", 8501))
 
 HTML_PAGE = """<!DOCTYPE html>
 <html lang="en">
