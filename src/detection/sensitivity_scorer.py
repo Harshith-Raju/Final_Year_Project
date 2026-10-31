@@ -81,9 +81,9 @@ class DynamicSensitivityScorer:
                 cat = "ENV_VARIABLE"
 
             # Secrets, API keys, and hashes NEVER contain whitespace
-            if " " not in val and len(val) >= 12:
+            if " " not in val and len(val) >= 10:
                 entropy = self.pattern_matcher.calculate_shannon_entropy(val)
-                if entropy > 3.8:
+                if entropy > 3.4:
                     score = 3
                     cat = "HIGH_ENTROPY_KEY"
 
@@ -96,6 +96,18 @@ class DynamicSensitivityScorer:
             cat = item["rule"]
             score = 3  # All regex rules for secrets are critical
             self._record_match(matches_dict, val, cat, score, item["confidence"], f"Pattern rule: {cat}")
+
+        # 3. Prompt Injection and Malicious Comment Defense (Defends against prompt injection & adversarial extraction)
+        injection_patterns = [
+            r"(?i)ignore\s+(?:all\s+)?previous\s+instructions",
+            r"(?i)reveal\s+(?:all\s+)?(?:secret|password|key|token|placeholder)s?",
+            r"(?i)system\s*prompt\s*override",
+            r"(?i)disregard\s+(?:privacy|security)\s+rules"
+        ]
+        for inj in injection_patterns:
+            for match in re.finditer(inj, code):
+                val = match.group(0)
+                self._record_match(matches_dict, val, "PROMPT_INJECTION_PAYLOAD", 3, 0.99, "Security Defense Guardrail")
 
         # 3. Local NER Scanning
         ner_results = self.ner_engine.scan_pii(code)

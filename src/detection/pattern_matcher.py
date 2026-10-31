@@ -17,15 +17,15 @@ class SecretPatternMatcher:
 
     PATTERNS: Dict[str, re.Pattern] = {
         "OPENAI_API_KEY": re.compile(r"\bsk-[a-zA-Z0-9_-]{20,64}\b"),
-        "GITHUB_TOKEN": re.compile(r"\b(?:ghp|gho|ghu|ghs|ghr)_[a-zA-Z0-9]{36,255}\b"),
-        "AWS_ACCESS_KEY": re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
-        "AWS_SECRET_KEY": re.compile(r"\b[0-9a-zA-Z/+]{40}\b"),
+        "GITHUB_TOKEN": re.compile(r"\b(?:ghp|gho|ghu|ghs|ghr|github_pat)_[a-zA-Z0-9_]{36,255}\b"),
+        "AWS_ACCESS_KEY": re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"),
+        "AWS_SECRET_KEY": re.compile(r"""(?i)(?:aws_secret_access_key|aws_secret_key)\s*[:=]\s*["']?([0-9a-zA-Z/+]{40})["']?"""),
         "GOOGLE_API_KEY": re.compile(r"\bAIza[0-9A-Za-z\\-_]{35}\b"),
         "SLACK_TOKEN": re.compile(r"\bxox[baprs]-[0-9a-zA-Z]{10,48}\b"),
-        "STRIPE_KEY": re.compile(r"\b(?:sk|rk)_live_[0-9a-zA-Z]{24,34}\b"),
+        "STRIPE_KEY": re.compile(r"\b(?:sk|rk)_(?:live|test)_[0-9a-zA-Z]{24,34}\b"),
         "JWT_TOKEN": re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"),
         "DATABASE_URL": re.compile(
-            r"\b(?:postgres|postgresql|mysql|mongodb|redis|sqlite|mssql):\/\/[^\s\'\"]+:[^\s\'\"]+@[^\s\'\"]+\b",
+            r"\b(?:postgres|postgresql|mysql|mongodb|mongodb\+srv|redis|sqlite|mssql):\/\/[^\s\'\"]+:[^\s\'\"]+@[^\s\'\"]+\b",
             re.IGNORECASE
         ),
         "PRIVATE_KEY_HEADER": re.compile(
@@ -33,7 +33,7 @@ class SecretPatternMatcher:
         ),
         "BEARER_TOKEN": re.compile(r"Bearer\s+([A-Za-z0-9\-_\.~+/=]{20,})", re.IGNORECASE),
         "GENERIC_SECRET_IN_STRING": re.compile(
-            r"""(?i)(?:password|passwd|secret|api_key|token)\s*[:=]\s*["']([^"']{8,})["']"""
+            r"""(?i)(?:password|passwd|pwd|secret|api_key|token|auth_token|client_secret)\s*[:=]\s*["']([^"']{6,})["']"""
         ),
     }
 
@@ -69,8 +69,13 @@ class SecretPatternMatcher:
         # 1. Regex rule scans
         for rule_name, pattern in self.PATTERNS.items():
             for m in pattern.finditer(text):
-                val = m.group(0)
-                span = m.span()
+                # If pattern has a capturing group (e.g. for key/token value inside quotes), use group 1
+                if m.lastindex and m.lastindex >= 1 and rule_name == "GENERIC_SECRET_IN_STRING":
+                    val = m.group(1)
+                    span = m.span(1)
+                else:
+                    val = m.group(0)
+                    span = m.span()
                 if span in seen_spans:
                     continue
                 seen_spans.add(span)
@@ -88,8 +93,11 @@ class SecretPatternMatcher:
         # Splits code into alphanumeric words/tokens to catch obscure keys
         candidate_words = re.findall(r'[a-zA-Z0-9_\-\.]{16,}', text)
         for word in candidate_words:
-            # Skip if common camelCase or plain English-like variable
-            if word.lower() in ("implementation", "unsupportedmediatype", "authentication"):
+            # Skip if common camelCase, standard identifiers or plain English-like variable
+            if word.lower() in ("implementation", "unsupportedmediatype", "authentication", "financial_records", "fetch_financial_records", "dispatch_cloud_job"):
+                continue
+            # If it's a standard function or identifier name without secret keywords, skip
+            if word.isidentifier() and not any(s in word.lower() for s in ("key", "secret", "token", "pass", "pwd", "auth")):
                 continue
             entropy = self.calculate_shannon_entropy(word)
             if entropy >= self.entropy_threshold:

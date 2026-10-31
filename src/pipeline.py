@@ -95,7 +95,14 @@ class PrivacyPreservingReviewPipeline:
             registered_secrets=registered_secrets,
             valid_placeholders=valid_placeholders
         )
-        validated_text = validation_result["sanitized_response"]
+        # If any registered secret was accidentally echoed, redact it immediately
+        sanitized_text = validation_result["sanitized_response"]
+        for secret in registered_secrets:
+            if secret in sanitized_text:
+                sanitized_text = sanitized_text.replace(secret, "[REDACTED_LEAK_PREVENTED]")
+            if len(secret) >= 12 and secret[:12] in sanitized_text:
+                sanitized_text = sanitized_text.replace(secret[:12], "[REDACTED_LEAK_PREVENTED]")
+        validated_text = sanitized_text
         timing["output_validation_ms"] = (time.perf_counter() - t0) * 1000
 
         # -------------------------------------------------------------
